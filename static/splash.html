@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spark — System Initialization…</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Fira Code', 'Consolas', 'Courier New', Courier, monospace;
+      background: #080a08;
+      color: #33ff33;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-app-region: drag;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* CRT scanline and flickering effect */
+    body::after {
+      content: " ";
+      display: block;
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      z-index: 20;
+      background-size: 100% 4px, 6px 100%;
+      pointer-events: none;
+    }
+
+    /* Green terminal glow */
+    .glow-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      box-shadow: inset 0 0 100px rgba(0, 255, 0, 0.15);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Sci-fi Terminal Logo */
+    .logo-container {
+      position: relative;
+      margin-bottom: 28px;
+      animation: bootIn 0.8s ease-out both;
+    }
+    .logo-glow-ring {
+      width: 110px; height: 110px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 255, 0, 0.25);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.1), inset 0 0 15px rgba(0, 255, 0, 0.05);
+      position: relative;
+      background: rgba(0, 15, 0, 0.2);
+    }
+    .logo-glow-ring::after {
+      content: "";
+      position: absolute;
+      top: -4px; left: -4px; right: -4px; bottom: -4px;
+      border-radius: 50%;
+      border: 1px dashed rgba(0, 255, 0, 0.4);
+      animation: rotateRing 15s linear infinite;
+    }
+    .logo-img {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 8px rgba(0, 255, 0, 0.6));
+    }
+
+    @keyframes rotateRing {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* Terminal Console */
+    .console-wrap {
+      width: 380px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 14px 20px;
+      background: rgba(0, 10, 0, 0.45);
+      border: 1px solid rgba(0, 255, 0, 0.2);
+      border-radius: 4px;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.05);
+      animation: bootIn 0.8s ease-out 0.2s both;
+    }
+
+    .prompt-line {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #33ff33;
+      text-shadow: 0 0 4px rgba(0, 255, 0, 0.5);
+      margin-bottom: 8px;
+    }
+    .prompt-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 15px;
+      background: #33ff33;
+      margin-left: 4px;
+      animation: blink 0.8s steps(2, start) infinite;
+      vertical-align: middle;
+    }
+
+    .log-line {
+      font-size: 0.72rem;
+      color: rgba(51, 255, 51, 0.7);
+      margin-top: 4px;
+      min-height: 1.2em;
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      width: 100%;
+      margin-top: 12px;
+    }
+    .progress-bar-track {
+      height: 8px;
+      background: rgba(0, 255, 0, 0.05);
+      border: 1px solid rgba(0, 255, 0, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #33ff33;
+      box-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
+      transition: width 0.3s ease;
+    }
+
+    /* System Stats */
+    .system-status {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      font-size: 0.65rem;
+      color: rgba(51, 255, 51, 0.4);
+      margin-top: 6px;
+    }
+
+    @keyframes blink {
+      to { visibility: hidden; }
+    }
+    @keyframes bootIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Footer version */
+    .version {
+      position: fixed;
+      bottom: 15px;
+      font-size: 0.65rem;
+      color: rgba(51, 255, 51, 0.3);
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="glow-overlay"></div>
+
+  <div class="logo-container">
+    <div class="logo-glow-ring">
+      <img src="green_logo.png" class="logo-img" alt="Spark Terminal Logo" />
+    </div>
+  </div>
+
+  <div class="console-wrap">
+    <div class="prompt-line">spark@desktop:~$ init<span class="prompt-cursor"></span></div>
+    <div class="log-line" id="log-text">BOOTING SYSTEM MAINBOARD...</div>
+    <div class="progress-wrap">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress"></div>
+      </div>
+    </div>
+    <div class="system-status">
+      <span>CORE: ONLINE</span>
+      <span id="pct-text">00%</span>
+    </div>
+  </div>
+
+  <div class="version">SPARK OS // VER 1.0.0</div>
+
+  <script>
+    const progress = document.getElementById('progress');
+    const logText = document.getElementById('log-text');
+    const pctText = document.getElementById('pct-text');
+
+    const bootSequence = [
+      { pct: 10, msg: 'INITIALIZING COMPILER THREADS...', delay: 0 },
+      { pct: 25, msg: 'ESTABLISHING TRUSTED LOOPBACK...', delay: 1500 },
+      { pct: 45, msg: 'MOUNTING SQLITE DATABASE CORRESPONDER...', delay: 3500 },
+      { pct: 65, msg: 'VALIDATING MCP PLUGINS & CAPABILITIES...', delay: 5500 },
+      { pct: 85, msg: 'SYNCHRONIZING SECURE TOKEN CACHES...', delay: 8000 },
+      { pct: 95, msg: 'PRE-LOADING GEMMA & NEMOTRON DRIVERS...', delay: 11000 },
+      { pct: 100, msg: 'INITIALIZATION COMPLETE. STARTING INTERFACE...', delay: 14000 }
+    ];
+
+    bootSequence.forEach(({ pct, msg, delay }) => {
+      setTimeout(() => {
+        progress.style.width = pct + '%';
+        logText.textContent = '> ' + msg;
+        pctText.textContent = String(pct).padStart(2, '0') + '%';
+      }, delay);
+    });
+  </script>
+</body>
+</html>

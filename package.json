@@ -1,0 +1,101 @@
+{
+  "name": "spark",
+  "version": "1.0.0",
+  "description": "Spark — AI Desktop powered by Odysseus",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect",
+    "build": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pewdiepie-archdaemon/odysseus.git"
+  },
+  "devDependencies": {
+    "@antithesishq/bombadil": "^0.3.2",
+    "electron": "^42.3.3",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
+    "electron-updater": "^6.8.9"
+  },
+  "build": {
+    "appId": "com.odysseus.spark",
+    "productName": "Spark",
+    "copyright": "Copyright © 2025 Odysseus",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "pavanchandar77",
+        "repo": "spark"
+      }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "static/**",
+      "!static/index.html",
+      "node_modules/**",
+      "!node_modules/**/README*",
+      "!node_modules/**/*.md"
+    ],
+    "extraResources": [
+      {
+        "from": ".",
+        "to": "app",
+        "filter": [
+          "app.py",
+          "src/**",
+          "routes/**",
+          "core/**",
+          "services/**",
+          "integrations/**",
+          "companion/**",
+          "mcp_servers/**",
+          "config/**",
+          "data/**",
+          "static/**",
+          "requirements.txt",
+          ".env",
+          "venv/**"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "static/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Spark"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "static/icon-512.png",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "static/icon-512.png",
+      "category": "Office"
+    }
+  }
+}

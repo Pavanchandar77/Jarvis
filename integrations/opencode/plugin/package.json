@@ -1,0 +1,14 @@
+{
+  "name": "spark-opencode-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Out-of-tree OpenCode plugin — Spark Harness bridge (no OpenCode core patches)",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  }
+}

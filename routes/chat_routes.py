@@ -463,7 +463,19 @@ def setup_chat_routes(
             allow_web_search = "false"
             use_web = "false"
             use_research = "false"
-        workspace = ""
+        # Optional project workspace (absolute path). When set, agent tools are
+        # confined to it and Semantic Twin generation roots there automatically.
+        workspace = (form_data.get("workspace") or "").strip()
+        if is_code_mode and not workspace:
+            # Default code-mode projects under data/projects/<session>
+            try:
+                from src.constants import PROJECTS_DIR
+                import os as _os
+                _sess_key = (session or "default").replace("/", "_")[:64]
+                workspace = _os.path.join(PROJECTS_DIR, _sess_key)
+                _os.makedirs(workspace, exist_ok=True)
+            except Exception:
+                workspace = ""
         # Plan mode is a modifier on agent mode — it only makes sense with tools.
         if plan_mode:
             chat_mode = "agent"
@@ -1163,7 +1175,7 @@ def setup_chat_routes(
                             tool_policy=tool_policy,
                             owner=_user,
                             fallbacks=_fallback_candidates,
-                            workspace=None,
+                            workspace=workspace or None,
                             plan_mode=plan_mode,
                             approved_plan=approved_plan or None,
                             is_code_mode=is_code_mode,
@@ -1189,6 +1201,7 @@ def setup_chat_routes(
                                         "rounds_exhausted",
                                         "ask_user",
                                         "plan_update",
+                                        "semantic_twin",
                                     ):
                                         if data.get("type") == "agent_step":
                                             _agent_rounds = max(_agent_rounds, data.get("round", 1))

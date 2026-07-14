@@ -1,5 +1,5 @@
 // ============================================
-// Odysseus UI â€” Main Application Orchestrator
+// Spark UI â€” Main Application Orchestrator
 // ES6 module â€” entry point, no exports (wires all modules together)
 // ============================================
 import Storage from './js/storage.js';
@@ -76,7 +76,7 @@ async function _refreshDefaultChat() {
     const d = await (await fetch('/api/default-chat')).json();
     if (d && d.endpoint_url && d.model) {
       _defaultChat = d;
-      try { window.__odysseusDefaultChat = d; } catch (_) {}
+      try { window.__sparkDefaultChat = d; } catch (_) {}
       return d;
     }
   } catch (_) {}
@@ -833,6 +833,48 @@ function initializeEventListeners() {
     });
   }
 
+  // â”€â”€ Coding Mode (first-class engineering workspace) â”€â”€
+  const openCodingMode = async () => {
+    const { getCodingMode } = await import('./js/coding/mode.js');
+    getCodingMode().open();
+    if (location.pathname !== '/coding') {
+      try { history.pushState({}, '', '/coding'); } catch (_) {}
+    }
+  };
+  const toolCodingBtn = el('tool-coding-btn');
+  if (toolCodingBtn) {
+    toolCodingBtn.addEventListener('click', () => { openCodingMode(); });
+  }
+  const railCodingBtn = el('rail-coding');
+  if (railCodingBtn) {
+    railCodingBtn.addEventListener('click', () => { openCodingMode(); });
+  }
+
+  // Living Software Workspace (Mission Control / Architecture / Runtime / …)
+  const openLiving = async (view) => {
+    const { getLivingShell } = await import('./js/living/shell.js');
+    getLivingShell().open(view || 'mission');
+  };
+  const livingBtns = [
+    ['tool-mission-btn', 'mission'],
+    ['rail-mission', 'mission'],
+    ['tool-architecture-btn', 'architecture'],
+    ['rail-architecture', 'architecture'],
+    ['tool-runtime-viz-btn', 'runtime'],
+  ];
+  livingBtns.forEach(([id, view]) => {
+    const b = el(id);
+    if (b) b.addEventListener('click', () => openLiving(view));
+  });
+  // Global Command Center (Ctrl/Cmd+K) even when living shell not open yet
+  document.addEventListener('keydown', async (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !e.target.closest('input, textarea, [contenteditable]')) {
+      e.preventDefault();
+      const { getLivingShell } = await import('./js/living/shell.js');
+      getLivingShell().openCommandCenter();
+    }
+  });
+
   // â”€â”€ Cookbook modal toggle â”€â”€
   const toolCookbookBtn = el('tool-cookbook-btn');
   if (toolCookbookBtn) {
@@ -1006,6 +1048,14 @@ function initializeEventListeners() {
       }
     },
     '/calendar': () => calendarModule && calendarModule.openCalendar(),
+    '/coding': () => document.getElementById('tool-coding-btn')?.click(),
+    '/mission': () => document.getElementById('tool-mission-btn')?.click(),
+    '/architecture': () => document.getElementById('tool-architecture-btn')?.click(),
+    '/runtime-viz': () => document.getElementById('tool-runtime-viz-btn')?.click(),
+    '/time-travel': async () => {
+      const { getLivingShell } = await import('./js/living/shell.js');
+      getLivingShell().open('timeline');
+    },
     '/cookbook': () => document.getElementById('tool-cookbook-btn')?.click(),
     '/email':    () => {
       // Collapse the wide sidebar â†’ icon rail (48px) so the user keeps
@@ -1051,7 +1101,7 @@ function initializeEventListeners() {
   // click handler in emailInbox, sessionModule's loaded session list) are
   // still being wired up further down in this same function. Stash the
   // opener so it runs from sessionModule.loadSessions().finally() below.
-  if (_opener) window._odysseusRouteOpener = _opener;
+  if (_opener) window._sparkRouteOpener = _opener;
 
   // Archive browser tool button
   const toolLibraryBtn = el('tool-library-btn');
@@ -1314,7 +1364,7 @@ function initializeEventListeners() {
     modelSortDropdown.querySelectorAll('.sort-option').forEach(opt => {
       opt.addEventListener('click', () => {
         const mode = opt.dataset.sort;
-        Storage.set('odysseus-model-sort', mode);
+        Storage.set('spark-model-sort', mode);
         if (modelsModule) modelsModule.refreshModels();
         modelSortDropdown.style.display = 'none';
         uiModule.showToast('Models sorted: ' + opt.textContent.trim().toLowerCase());
@@ -1640,7 +1690,7 @@ function initializeEventListeners() {
   })();
 
   // â”€â”€ Tool splash explainer messages (shown first 2 times per tool) â”€â”€
-  const SPLASH_COUNT_KEY = 'odysseus-tool-splash-counts';
+  const SPLASH_COUNT_KEY = 'spark-tool-splash-counts';
   const SPLASH_MAX = 2;
   const _toolSplashes = {
     web: { role: 'Web Search', text: 'Searches the web for relevant information to include in the response. Results are fetched and summarized before the AI answers.' },
@@ -2478,7 +2528,7 @@ function initializeEventListeners() {
   }
 
   // â”€â”€ UI Visibility (Customize UI modal) â”€â”€
-  const UI_VIS_KEY = 'odysseus-ui-visibility';
+  const UI_VIS_KEY = 'spark-ui-visibility';
 
   // Selector map: key â†’ CSS selector(s) for targets
   const UI_VIS_MAP = {
@@ -2757,7 +2807,7 @@ function initializeEventListeners() {
 
   // Migrate old toolbar visibility key if present
   (function migrateOldToolbarVis() {
-    const OLD_KEY = 'odysseus-toolbar-visibility';
+    const OLD_KEY = 'spark-toolbar-visibility';
     try {
       const old = Storage.getJSON(OLD_KEY, null);
       if (old && typeof old === 'object') {
@@ -3436,9 +3486,9 @@ function initializeEventListeners() {
 // ============================================
 // INITIALIZATION ON PAGE LOAD
 // ============================================
-function startOdysseusApp() {
-  if (window.__odysseusAppStarted) return;
-  window.__odysseusAppStarted = true;
+function startSparkApp() {
+  if (window.__sparkAppStarted) return;
+  window.__sparkAppStarted = true;
   // Set CSS variables
   document.documentElement.style.setProperty('--line-height', '20px');
 
@@ -3487,7 +3537,7 @@ function startOdysseusApp() {
     documentModule.init(API_BASE);
     // Restore document panel if it was open before refresh
     const _curSession = sessionModule && sessionModule.getCurrentSessionId();
-    if (_curSession && localStorage.getItem('odysseus-doc-open-' + _curSession) === '1') {
+    if (_curSession && localStorage.getItem('spark-doc-open-' + _curSession) === '1') {
       documentModule.loadSessionDocs(_curSession);
     }
   }  
@@ -3650,7 +3700,7 @@ function startOdysseusApp() {
   const _newChatIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 
   // Expose icons globally so chat.js updateSubmitButton can use them
-  window._odysseusBtnIcons = { send: _sendIcon, mic: _micIcon, stop: _stopIcon, newChat: _newChatIcon };
+  window._sparkBtnIcons = { send: _sendIcon, mic: _micIcon, stop: _stopIcon, newChat: _newChatIcon };
 
   function _isSttEnabled() {
     return voiceRecorderModule._sttProvider && voiceRecorderModule._sttProvider !== 'disabled';
@@ -4013,9 +4063,9 @@ function startOdysseusApp() {
         if (loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 300); }
         // Fire any URL route opener now that sessions + module wiring are
         // ready. Deferred from up top of init for exactly this reason.
-        if (window._odysseusRouteOpener) {
-          try { window._odysseusRouteOpener(); } catch (_) {}
-          window._odysseusRouteOpener = null;
+        if (window._sparkRouteOpener) {
+          try { window._sparkRouteOpener(); } catch (_) {}
+          window._sparkRouteOpener = null;
         }
       });
   } else {
@@ -4174,9 +4224,9 @@ function startOdysseusApp() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startOdysseusApp, { once: true });
+  document.addEventListener('DOMContentLoaded', startSparkApp, { once: true });
 } else {
-  startOdysseusApp();
+  startSparkApp();
 }
 
 window.submitInteractiveAnswer = function(text) {

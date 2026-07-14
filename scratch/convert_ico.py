@@ -2,8 +2,8 @@ import sys
 import os
 from PIL import Image
 
-png_path = r"C:\Users\pavan\odysseus\static\green_logo.png"
-ico_path = r"C:\Users\pavan\odysseus\static\icon.ico"
+png_path = r"C:\Users\pavan\spark\static\green_logo.png"
+ico_path = r"C:\Users\pavan\spark\static\icon.ico"
 
 if os.path.exists(png_path):
     try:

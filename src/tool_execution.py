@@ -128,7 +128,11 @@ async def _do_edit_file(content: str, workspace: Optional[str] = None) -> Dict[s
         return {"error": f"edit_file: old_string is not unique in {path} ({n} matches). Add surrounding context or set replace_all=true.", "exit_code": 1}
 
     n = original.count(old)
-    result = {"output": f"Edited {path} ({n} replacement{'s' if n != 1 else ''})", "exit_code": 0}
+    result = {
+        "output": f"Edited {path} ({n} replacement{'s' if n != 1 else ''})",
+        "exit_code": 0,
+        "path": path,
+    }
     diff = _unified_diff(original, updated, path)
     if diff:
         result["diff"] = diff
@@ -797,7 +801,7 @@ async def _direct_fallback(
             except OSError as e:
                 return {"error": f"write_file: {path}: {e}", "exit_code": 1}
             diff = _unified_diff(old_content, body, path)
-            result = {"output": f"Wrote {size} bytes to {path}", "exit_code": 0}
+            result = {"output": f"Wrote {size} bytes to {path}", "exit_code": 0, "path": path}
             if diff:
                 result["diff"] = diff
             return result
@@ -1431,6 +1435,10 @@ async def execute_tool_block(
     elif tool == "edit_file":
         result = await _do_edit_file(content, workspace=workspace)
         desc = result.get("output") or result.get("error") or "edit_file"
+    elif tool == "semantic_twin":
+        from services.semantic_twin.integration.agent_bridge import do_semantic_twin
+        desc = "semantic_twin"
+        result = await asyncio.to_thread(do_semantic_twin, content, owner)
     elif tool == "trigger_research":
         desc = "trigger_research"
         result = await do_trigger_research(content, owner=owner)
@@ -1474,6 +1482,31 @@ async def execute_tool_block(
         result = {"error": f"Unknown tool type: {tool}", "exit_code": 1}
 
     logger.info(f"Tool executed: {desc} -> exit_code={result.get('exit_code', 'n/a')}")
+
+    # Semantic Twin continuous sync: track successful disk writes so the
+    # twin co-evolves with the project (Phase 1 integration).
+    if tool in ("write_file", "edit_file") and result.get("exit_code") in (0, None):
+        try:
+            from services.semantic_twin.integration.hooks import on_file_written
+            _path = result.get("path")
+            if not _path and content:
+                _path = content.split("\n", 1)[0].strip()
+            if _path:
+                on_file_written(
+                    _path,
+                    session_id=session_id,
+                    owner=owner,
+                    workspace=workspace,
+                    tool=tool,
+                    exit_code=int(result.get("exit_code") or 0),
+                )
+        except Exception:
+            logger.debug("semantic twin write hook failed", exc_info=True)
+
+    if tool == "semantic_twin":
+        # Already handled below when registered; keep path for note_tool if needed
+        pass
+
     return desc, result
 
 

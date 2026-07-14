@@ -1,7 +1,7 @@
 /**
  * preload.js — Electron context bridge
  *
- * Exposes safe, whitelisted Electron APIs to the Odysseus web UI
+ * Exposes safe, whitelisted Electron APIs to the Spark web UI
  * without giving the renderer full Node.js access.
  */
 
@@ -29,7 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform:   process.platform,
 });
 
-// ── Legacy compatibility (some parts of Odysseus use window.electron) ────────
+// ── Legacy compatibility (some parts of Spark use window.electron) ────────
 contextBridge.exposeInMainWorld('electron', {
   send: (channel, ...args) => {
     const allowed = ['win:minimize', 'win:maximize', 'win:close', 'win:control', 'halo:show', 'halo:hide'];

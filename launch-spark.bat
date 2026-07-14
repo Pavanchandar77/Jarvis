@@ -1,8 +1,8 @@
 @echo off
-title Spark Desktop — Odysseus
+title Spark Desktop — Spark
 echo.
 echo  ==========================================
-echo   Spark Desktop — Powered by Odysseus
+echo   Spark Desktop — Powered by Spark
 echo  ==========================================
 echo.
 

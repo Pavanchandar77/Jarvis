@@ -12,7 +12,7 @@ try:
 except Exception as e:
     settings = {}
 
-project_root = r"C:\Users\pavan\odysseus"
+project_root = r"C:\Users\pavan\spark"
 extra_roots = settings.get("tool_path_extra_roots", [])
 if not isinstance(extra_roots, list):
     extra_roots = []

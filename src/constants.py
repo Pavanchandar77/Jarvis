@@ -7,11 +7,11 @@ APP_VERSION = "1.0.0"
 # Base paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/"
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-DATA_DIR = os.getenv("ODYSSEUS_DATA_DIR", os.path.join(BASE_DIR, "data"))
+DATA_DIR = os.getenv("SPARK_DATA_DIR", os.path.join(BASE_DIR, "data"))
 
 # Data file paths
 # Single source of truth: every persisted file/dir lives under DATA_DIR, which
-# is the ONLY place ODYSSEUS_DATA_DIR is read. Import these constants instead of
+# is the ONLY place SPARK_DATA_DIR is read. Import these constants instead of
 # re-deriving paths from __file__ or a relative "data" literal.
 SESSIONS_FILE = os.path.join(DATA_DIR, "sessions.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
@@ -52,9 +52,24 @@ SKILLS_DIR = os.path.join(DATA_DIR, "skills")
 GALLERY_DIR = os.path.join(DATA_DIR, "gallery")
 GALLERY_UPLOADS_DIR = os.path.join(DATA_DIR, "gallery_uploads")
 MEMORY_VECTORS_DIR = os.path.join(DATA_DIR, "memory_vectors")
+SEMANTIC_TWINS_DIR = os.path.join(DATA_DIR, "semantic_twins")
+PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
+PROJECT_REGISTRY_FILE = os.path.join(DATA_DIR, "project_registry.json")
+SPARK_OS_DIR = os.path.join(DATA_DIR, "spark_os")
+ORG_MEMORY_DIR = os.path.join(SPARK_OS_DIR, "org_memory")
+ARCHITECTURE_STORE_DIR = os.path.join(SPARK_OS_DIR, "architectures")
+MARKETPLACE_DIR = os.path.join(SPARK_OS_DIR, "marketplace")
+AGENT_WORKSPACE_DIR = os.path.join(SPARK_OS_DIR, "agent_workspaces")
+SIMULATION_DIR = os.path.join(SPARK_OS_DIR, "simulations")
+REFACTOR_DIR = os.path.join(SPARK_OS_DIR, "refactors")
+# Coding engine harness + workspace control plane
+WORKSPACES_DIR = os.path.join(DATA_DIR, "workspaces")
+WORKSPACE_REGISTRY_FILE = os.path.join(DATA_DIR, "workspace_registry.json")
+HARNESS_STATE_DIR = os.path.join(DATA_DIR, "harness")
+OPENCODE_PIN_FILE = os.path.join(BASE_DIR, "integrations", "opencode", "UPSTREAM_SHA")
 
 # Paths with an intentional dedicated env override, defaulting under DATA_DIR.
-MAIL_ATTACHMENTS_DIR = os.getenv("ODYSSEUS_MAIL_ATTACHMENTS_DIR", os.path.join(DATA_DIR, "mail-attachments"))
+MAIL_ATTACHMENTS_DIR = os.getenv("SPARK_MAIL_ATTACHMENTS_DIR", os.path.join(DATA_DIR, "mail-attachments"))
 FASTEMBED_CACHE_DIR = os.getenv("FASTEMBED_CACHE_PATH", os.path.join(DATA_DIR, "fastembed_cache"))
 
 # Agent tool output limits (single source of truth — imported by tool_execution.py,
@@ -85,11 +100,11 @@ DEFAULT_MAX_TOKENS = 0
 
 
 def internal_api_base() -> str:
-    """Base URL for in-process loopback calls to Odysseus's own API.
+    """Base URL for in-process loopback calls to Spark's own API.
 
     Agent tools and background jobs reach admin-gated routes by calling the
     running server over HTTP. Resolution order:
-      1. ODYSSEUS_INTERNAL_BASE  - explicit override (e.g. behind a TLS proxy).
+      1. SPARK_INTERNAL_BASE  - explicit override (e.g. behind a TLS proxy).
       2. APP_PORT                - http://127.0.0.1:$APP_PORT (docker-compose).
       3. Fallback http://127.0.0.1:7000 - legacy default.
 
@@ -97,7 +112,7 @@ def internal_api_base() -> str:
     call. Without this, loopback tools fail with "All connection attempts
     failed" whenever the server is not on port 7000.
     """
-    override = os.environ.get("ODYSSEUS_INTERNAL_BASE")
+    override = os.environ.get("SPARK_INTERNAL_BASE")
     if override:
         return override.rstrip("/")
     return f"http://127.0.0.1:{os.environ.get('APP_PORT', '7000')}"

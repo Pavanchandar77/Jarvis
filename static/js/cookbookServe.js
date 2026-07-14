@@ -528,8 +528,8 @@ function _rerenderCachedModels() {
         : (_lastUsed || (_isLegacyFlat ? _allSs : {}));
       const detectedBackend = _detectBackend(m).backend;
       const _allowedBackends = new Set(_isWindows()
-        ? ['llamacpp']
-        : (_isMetal() ? ['llamacpp', 'ollama'] : ['vllm', 'sglang', 'llamacpp', 'ollama', 'diffusers']));
+        ? ['llamacpp', 'colibri']
+        : (_isMetal() ? ['llamacpp', 'ollama', 'colibri'] : ['vllm', 'sglang', 'llamacpp', 'ollama', 'colibri', 'diffusers']));
       const defaultBackend = (ss._forceBackend && ss.backend && _allowedBackends.has(ss.backend))
         ? ss.backend
         : detectedBackend;
@@ -588,13 +588,13 @@ function _rerenderCachedModels() {
       // Row 1: Backend + Server + Env
       panelHtml += `<div class="hwfit-serve-row">`;
       const _backendChoices = _isWindows()
-        ? [['llamacpp','llama.cpp']]
+        ? [['llamacpp','llama.cpp'],['colibri','Colibri']]
         : _isMetal()
         // Diffusers (diffusion_server.py) is CUDA-only — omit it on Metal.
-        ? [['llamacpp','llama.cpp'],['ollama','Ollama']]
-        : [['vllm','vLLM'],['sglang','SGLang'],['llamacpp','llama.cpp'],['ollama','Ollama'],['diffusers','Diffusers']];
+        ? [['llamacpp','llama.cpp'],['ollama','Ollama'],['colibri','Colibri']]
+        : [['vllm','vLLM'],['sglang','SGLang'],['llamacpp','llama.cpp'],['ollama','Ollama'],['colibri','Colibri'],['diffusers','Diffusers']];
       const backendOpts = _backendChoices.map(([v,l]) => `<option value="${v}"${defaultBackend===v?' selected':''}>${l}</option>`).join('');
-      panelHtml += `<label>${_l('Backend','Inference engine: vLLM, SGLang, llama.cpp, Ollama, or Diffusers')}<select class="hwfit-sf" data-field="backend">${backendOpts}</select></label>`;
+      panelHtml += `<label>${_l('Backend','Inference engine: vLLM, SGLang, llama.cpp, Ollama, Colibri, or Diffusers')}<select class="hwfit-sf" data-field="backend">${backendOpts}</select></label>`;
       panelHtml += `<input type="hidden" class="hwfit-sf" data-field="host" value="${esc(_es.remoteHost || '')}" />`;
       panelHtml += `<label>${_l('venv','Path to Python venv or conda env activate script')}<input type="text" class="hwfit-sf hwfit-sf-wide" data-field="venv" value="${esc(sv('venv', _es.envPath || _srvVenv || ''))}" placeholder="~/venv" /></label>`;
       const defaultPort = defaultBackend === 'ollama' ? '11434' : _nextAvailablePort();
@@ -1133,7 +1133,7 @@ function _rerenderCachedModels() {
       }
 
       // Saved-configs dropdown. Rebuilt each open (and after delete) so it always
-      // reflects the stored presets. Standard Odysseus .dropdown look, positioned
+      // reflects the stored presets. Standard Spark .dropdown look, positioned
       // fixed at the toggle and right-aligned to it.
       function _showSavedConfigMenu(anchor) {
         document.querySelectorAll('.cookbook-saved-menu').forEach(d => { if (typeof d._dismiss === 'function') d._dismiss(); else d.remove(); });
@@ -2222,7 +2222,7 @@ export async function _fetchCachedModels() {
 
     if (!allModels.length) {
       if (!host) {
-        list.innerHTML = '<div class="hwfit-loading" style="flex-direction:column;gap:6px;text-align:center;"><div>No cached models found</div><div style="font-size:11px;opacity:0.55;max-width:420px;line-height:1.4;">Docker Local uses Odysseus’s cache in <code>data/huggingface</code>. Download a model here, or copy an existing host HuggingFace cache into that folder once.</div></div>';
+        list.innerHTML = '<div class="hwfit-loading" style="flex-direction:column;gap:6px;text-align:center;"><div>No cached models found</div><div style="font-size:11px;opacity:0.55;max-width:420px;line-height:1.4;">Docker Local uses Spark’s cache in <code>data/huggingface</code>. Download a model here, or copy an existing host HuggingFace cache into that folder once.</div></div>';
       } else {
         list.innerHTML = '<div class="hwfit-loading">No cached models found</div>';
       }

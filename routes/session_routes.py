@@ -388,13 +388,16 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
             from src.llm_core import list_model_ids
             import os as _os
             req_base = _os.path.basename(model_to_use.rstrip("/"))
-            avail = list_model_ids(
-                endpoint_url,
-                timeout=REQUEST_TIMEOUT,
-                headers=validation_headers,
-                owner=user,
-                endpoint_id=endpoint_id.strip() if endpoint_id else None,
-            )
+            if "colibri" in model_to_use.lower() or "coli" in model_to_use.lower():
+                avail = [model_to_use]
+            else:
+                avail = list_model_ids(
+                    endpoint_url,
+                    timeout=REQUEST_TIMEOUT,
+                    headers=validation_headers,
+                    owner=user,
+                    endpoint_id=endpoint_id.strip() if endpoint_id else None,
+                )
             if not avail:
                 raise HTTPException(400, "Cannot reach /v1/models")
             if model_to_use not in avail:

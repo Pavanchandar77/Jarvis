@@ -42,7 +42,7 @@ def _maybe_cascade_calendar_event(task) -> None:
     from core.middleware import INTERNAL_TOOL_HEADER, INTERNAL_TOOL_TOKEN
     headers = {INTERNAL_TOOL_HEADER: INTERNAL_TOOL_TOKEN}
     if task.owner:
-        headers["X-Odysseus-Owner"] = task.owner
+        headers["X-Spark-Owner"] = task.owner
 
     # Strategy 1: explicit UID marker in prompt.
     event_uid = ""
@@ -332,6 +332,7 @@ def setup_task_routes(task_scheduler) -> APIRouter:
 
     @router.get("")
     async def list_tasks(request: Request, status: Optional[str] = None,
+                         search: Optional[str] = None,
                          include_last_run: bool = False):
         user = _owner(request)
         if user:
@@ -352,12 +353,21 @@ def setup_task_routes(task_scheduler) -> APIRouter:
                 await task_scheduler.ensure_defaults(owner)
         db = SessionLocal()
         try:
-            q = db.query(ScheduledTask)
+            query_obj = db.query(ScheduledTask)
             if user:
-                q = q.filter(ScheduledTask.owner == user)
+                query_obj = query_obj.filter(ScheduledTask.owner == user)
             if status:
-                q = q.filter(ScheduledTask.status == status)
-            tasks = q.order_by(ScheduledTask.created_at.desc()).all()
+                query_obj = query_obj.filter(ScheduledTask.status == status)
+            if search:
+                from sqlalchemy import or_
+                search_pattern = f"%{search}%"
+                query_obj = query_obj.filter(or_(
+                    ScheduledTask.name.like(search_pattern),
+                    ScheduledTask.prompt.like(search_pattern),
+                    ScheduledTask.action.like(search_pattern),
+                    ScheduledTask.task_id.like(search_pattern)
+                ))
+            tasks = query_obj.order_by(ScheduledTask.created_at.desc()).all()
             return {"tasks": [_task_to_dict(t, include_last_run_result=include_last_run) for t in tasks]}
         finally:
             db.close()

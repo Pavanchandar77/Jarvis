@@ -611,6 +611,92 @@ def _cache_key(host: str, ssh_port: str, platform_name: str):
     )
 
 
+def _detect_disk_info(remote_host=None, ssh_port=None, platform_name=None) -> dict:
+    info = {
+        "disk_free_gb": 0.0,
+        "disk_type": "ssd",
+        "disk_speed_mbps": 3000.0,
+    }
+    import platform as _plat_mod
+    
+    # 1. Get Free Space
+    if not remote_host:
+        try:
+            total, used, free = shutil.disk_usage(os.path.expanduser("~"))
+            info["disk_free_gb"] = round(free / (1024 ** 3), 1)
+        except Exception:
+            pass
+    else:
+        if platform_name == "windows":
+            cmd = "Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } | Select-Object -First 1 | ForEach-Object { [math]::Round($_.FreeSpace / 1073741824, 1) }"
+            out = _run(f'powershell -Command "{cmd}"')
+            try:
+                info["disk_free_gb"] = float(out) if out else 0.0
+            except ValueError:
+                pass
+        else:
+            cmd = "df -BG ~ | tail -1 | awk '{print $4}' | tr -d 'G'"
+            out = _run(cmd)
+            try:
+                info["disk_free_gb"] = float(out) if out else 0.0
+            except ValueError:
+                pass
+
+    # 2. Detect SSD vs HDD
+    if not remote_host:
+        if os.name == "nt":
+            cmd = "Get-PhysicalDisk | Select-Object -ExpandProperty MediaType -ErrorAction SilentlyContinue"
+            out = _run([_powershell_exe(), "-NoProfile", "-NonInteractive", "-Command", cmd])
+            if out:
+                if "SSD" in out.upper():
+                    info["disk_type"] = "ssd"
+                    info["disk_speed_mbps"] = 3500.0
+                elif "HDD" in out.upper():
+                    info["disk_type"] = "hdd"
+                    info["disk_speed_mbps"] = 150.0
+        else:
+            if _plat_mod.system().lower() == "darwin":
+                info["disk_type"] = "ssd"
+                info["disk_speed_mbps"] = 5000.0
+            else:
+                try:
+                    is_ssd = True
+                    if os.path.exists("/sys/block"):
+                        for block_dev in os.listdir("/sys/block"):
+                            rot_path = f"/sys/block/{block_dev}/queue/rotational"
+                            if os.path.exists(rot_path):
+                                with open(rot_path) as f:
+                                    if f.read().strip() == "1":
+                                        is_ssd = False
+                    if not is_ssd:
+                        info["disk_type"] = "hdd"
+                        info["disk_speed_mbps"] = 120.0
+                except Exception:
+                    pass
+    else:
+        if platform_name == "windows":
+            cmd = "Get-PhysicalDisk | Select-Object -ExpandProperty MediaType -ErrorAction SilentlyContinue"
+            out = _run(f'powershell -Command "{cmd}"')
+            if out:
+                if "SSD" in out.upper():
+                    info["disk_type"] = "ssd"
+                    info["disk_speed_mbps"] = 3500.0
+                elif "HDD" in out.upper():
+                    info["disk_type"] = "hdd"
+                    info["disk_speed_mbps"] = 150.0
+        else:
+            if platform_name == "darwin":
+                info["disk_type"] = "ssd"
+                info["disk_speed_mbps"] = 5000.0
+            else:
+                out = _run("cat /sys/block/sd*/queue/rotational 2>/dev/null | grep 1")
+                if out:
+                    info["disk_type"] = "hdd"
+                    info["disk_speed_mbps"] = 120.0
+                    
+    return info
+
+
 def detect_system(host="", ssh_port="", platform="", fresh=False):
     """Detect system hardware: RAM, CPU, GPU. Cached per host (hardware rarely
     changes, and probing a remote host over SSH is slow). Pass fresh=True to
@@ -635,6 +721,8 @@ def detect_system(host="", ssh_port="", platform="", fresh=False):
     if _remote_platform == "windows" and _remote_host:
         result = _detect_windows()
         if result:
+            disk_info = _detect_disk_info(host, ssh_port, platform)
+            result.update(disk_info)
             _remote_host = None
             _remote_platform = None
             _cache_by_host[cache_key] = (now, result)
@@ -653,6 +741,8 @@ def detect_system(host="", ssh_port="", platform="", fresh=False):
     if not _remote_host and os.name == "nt":
         result = _detect_windows()
         if result:
+            disk_info = _detect_disk_info(None, None, None)
+            result.update(disk_info)
             _cache_by_host[cache_key] = (now, result)
             return result
         # PowerShell probe failed entirely — fall through to the generic path
@@ -713,6 +803,9 @@ def detect_system(host="", ssh_port="", platform="", fresh=False):
             # of the misleading "No GPU".
             "gpu_error": _last_gpu_error,
         }
+
+    disk_info = _detect_disk_info(host, ssh_port, platform)
+    result.update(disk_info)
 
     _remote_host = None
     _remote_platform = None

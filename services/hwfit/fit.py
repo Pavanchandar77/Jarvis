@@ -82,6 +82,10 @@ def _estimate_speed(model, quant, run_mode, system, offload_frac=0.0):
     Calibrated against a measured RX 9060 XT: DeepSeek-Coder-V2-Lite Q4_K_M with
     light offload → ~59 t/s est vs 59.8 measured.
     """
+    if run_mode == "colibri":
+        disk_speed = system.get("disk_speed_mbps", 3000.0) or 3000.0
+        return max(0.05, min(1.0, (disk_speed / 3000.0) * 0.1))
+
     pb = _active_params_b(model)
     is_moe = model.get("is_moe", False)
     bw = _lookup_bandwidth(system.get("gpu_name"))
@@ -322,6 +326,60 @@ def analyze_model(model, system, target_quant=None, scoring_use_case=None, targe
     except (TypeError, ValueError):
         target_context = 0
     ctx = min(model_ctx, target_context) if target_context > 0 else model_ctx
+
+    # ── Spark Hierarchical Memory / SSD-Offload Fitting ──
+    try:
+        from core.engine.neural_planner import NeuralExecutionPlanner
+        planner = NeuralExecutionPlanner()
+        plan = planner.plan_execution(model, system, target_quant, target_context)
+
+        # If the planner determines this should use streaming, route to the hierarchical memory runtime (using "colibri" run mode alias for UI compatibility)
+        if plan.streaming_enabled or is_explicit_colibri:
+            fit_level = "good" if plan.viable else "too_tight"
+            run_mode = "colibri" if plan.viable else "no_fit"
+
+            # Recalculate scores using local scoring helpers
+            q_score = _quality_score(model, plan.quantisation, score_use_case)
+            tps = plan.estimated_tps
+            s_score = _speed_score(tps, score_use_case)
+            f_score = 75.0 if plan.viable else 0.0
+            c_score = _context_score(plan.context_length, score_use_case)
+
+            wq, ws, wf, wc = USE_CASE_WEIGHTS.get(score_use_case, (0.45, 0.30, 0.15, 0.10))
+            composite = q_score * wq + s_score * ws + f_score * wf + c_score * wc if plan.viable else 0.0
+
+            required_mem = 0.0
+            if plan.memory_map:
+                required_mem = plan.memory_map.resident_gb + plan.memory_map.streaming_gb
+
+            return {
+                "name": model.get("name"),
+                "provider": model.get("provider"),
+                "parameter_count": model.get("parameter_count"),
+                "params_b": round(pb, 1),
+                "is_moe": is_moe,
+                "use_case": model_use_case,
+                "fit_level": fit_level,
+                "run_mode": run_mode,
+                "quant": plan.quantisation,
+                "context": plan.context_length,
+                "required_gb": round(required_mem, 1),
+                "speed_tps": round(tps, 2) if plan.viable else 0,
+                "score": round(composite, 1) if plan.viable else 0,
+                "scores": {
+                    "quality": round(q_score, 1) if plan.viable else 0,
+                    "speed": round(s_score, 1) if plan.viable else 0,
+                    "fit": round(f_score, 1) if plan.viable else 0,
+                    "context": round(c_score, 1) if plan.viable else 0,
+                },
+                "gguf_sources": model.get("gguf_sources", []),
+                "context_length": model_ctx,
+                "release_date": model.get("release_date", ""),
+                "target_context": target_context or None,
+            }
+    except Exception as e:
+        # Fall back to standard logic if engine imports or planning fails
+        pass
 
     native_quant = _native_quant(model)
     preq = is_prequantized(model)
@@ -591,7 +649,7 @@ def rank_models(system, use_case=None, limit=50, search=None, sort="score", quan
     for m in models:
         native_q = _native_quant(m)
 
-        # MLX needs the mlx_lm runtime, which Odysseus does not generate serve
+        # MLX needs the mlx_lm runtime, which Spark does not generate serve
         # commands for. Hide it on every backend, including Metal.
         if native_q.startswith("mlx-") or "mlx" in (m.get("name") or "").lower():
             continue
@@ -599,7 +657,7 @@ def rank_models(system, use_case=None, limit=50, search=None, sort="score", quan
         # ROCm support for vLLM/SGLang quantized safetensors is too brittle to
         # recommend blindly in the default scan. Keep AWQ/GPTQ/FP8 discoverable
         # only when the user explicitly picks that format from the quant filter;
-        # otherwise prefer GGUF/Q* entries that Odysseus can route through
+        # otherwise prefer GGUF/Q* entries that Spark can route through
         # llama.cpp/Ollama without pretending "fits VRAM" means "servable".
         if rocm and is_prequantized(m) and not filter_native:
             continue
@@ -617,7 +675,7 @@ def rank_models(system, use_case=None, limit=50, search=None, sort="score", quan
         # Otherwise the Cookbook rates vLLM-only AWQ/GPTQ builds "GOOD" on a
         # Radeon that can't actually serve them.
         #
-        # Windows is the same: Odysseus only supports llama.cpp on Windows,
+        # Windows is the same: Spark only supports llama.cpp on Windows,
         # which requires GGUF. vLLM/SGLang are explicitly blocked, so AWQ/GPTQ
         # models without a GGUF source are unservable there.
         if (apple_silicon or consumer_amd or is_windows) and not (m.get("is_gguf") or m.get("gguf_sources")):

@@ -1,0 +1,59 @@
+.sos-shell {
+  --bg: #070b14;
+  --panel: #0f172a;
+  --border: #1e293b;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  min-height: 100vh;
+  background: radial-gradient(900px 500px at 10% 0%, #0c4a6e33, var(--bg));
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+}
+.sos-header {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.9);
+}
+.sos-brand { font-weight: 800; letter-spacing: 0.04em; margin-right: 0.5rem; }
+.sos-twin {
+  background: #020617; border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 0.35rem 0.6rem; min-width: 14rem;
+}
+.sos-nav { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.sos-tab {
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 0.25rem 0.55rem; font-size: 0.75rem; cursor: pointer;
+}
+.sos-tab.active { color: #fff; border-color: var(--accent); background: #0c4a6e55; }
+.sos-main { padding: 1rem 1.25rem; max-width: 1100px; }
+.sos-muted { color: var(--muted); }
+.sos-error { color: #fca5a5; }
+.sos-pre {
+  background: #020617; border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.75rem; overflow: auto; max-height: 22rem; font-size: 0.8rem;
+}
+.sos-input, textarea.sos-input {
+  width: 100%; background: #020617; border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 0.5rem; margin: 0.5rem 0;
+}
+.sos-actions button, .sos-main button[data-act], .sos-scrub button {
+  background: #0369a1; color: #fff; border: 0; border-radius: 8px;
+  padding: 0.35rem 0.7rem; cursor: pointer; margin: 0.2rem;
+}
+.sos-caps { columns: 2; }
+.sos-chip {
+  display: inline-block; margin: 0.2rem; padding: 0.2rem 0.5rem;
+  border-radius: 999px; border: 1px solid var(--border); font-size: 0.75rem;
+}
+.sos-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem;
+}
+.sos-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 0.85rem;
+}
+.sev-critical, .sev-high { color: #fecaca; }
+.sev-medium { color: #fde68a; }
+.hl-failure { color: #f87171; }
+.hl-slow { color: #fbbf24; }
+.sos-frames li { margin: 0.35rem 0; }

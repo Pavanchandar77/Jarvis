@@ -1,0 +1,4 @@
+# Pin the OpenCode monorepo commit used with this Spark tree.
+# Update only via the upgrade procedure in README.md.
+# Leave blank until the first explicit pin after Phase A smoke tests.
+UNPINNED

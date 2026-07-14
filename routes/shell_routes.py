@@ -101,7 +101,7 @@ PTY_SUPPORTED = pty is not None and fcntl is not None and hasattr(os, "setsid")
 
 
 DOCKER_IN_CONTAINER_HINT = (
-    "Not available inside the Odysseus container by design. The image ships no "
+    "Not available inside the Spark container by design. The image ships no "
     "docker CLI and no host socket is mounted. Run Docker-backed launches on a "
     "remote server, where docker is checked over SSH. Mounting /var/run/docker.sock "
     "into the container would grant it host-root access, so only do that if you "
@@ -235,7 +235,7 @@ def _package_pip_update_status(
 
     if pkg.get("kind") == "system" or not pkg.get("pip"):
         return PackageUpdateStatus(
-            False, "Update this system dependency outside Odysseus."
+            False, "Update this system dependency outside Spark."
         )
 
     name = pkg.get("name")
@@ -258,7 +258,7 @@ def _package_pip_update_status(
     if name == "vllm" and binaries.get("vllm") and not dists.get("vllm"):
         return PackageUpdateStatus(
             False,
-            "Using a vLLM CLI on PATH without Python package metadata; update it outside Odysseus.",
+            "Using a vLLM CLI on PATH without Python package metadata; update it outside Spark.",
         )
 
     return PackageUpdateStatus(
@@ -385,7 +385,7 @@ def _find_line_break(buf):
 EXEC_TIMEOUT = 30  # seconds — shorter than agent's 60s
 STREAM_TIMEOUT = 120  # default for short commands
 MAX_OUTPUT = 200_000  # truncate limit
-TMUX_LOG_DIR = Path(tempfile.gettempdir()) / "odysseus-tmux"
+TMUX_LOG_DIR = Path(tempfile.gettempdir()) / "spark-tmux"
 PTY_UNSUPPORTED_ERROR = "pty_unsupported"
 
 
@@ -604,10 +604,10 @@ async def _generate_tmux(cmd: str, request: Request):
     script_path = TMUX_LOG_DIR / f"{session_id}.sh"
     script_path.write_text(
         f"#!/bin/bash\n"
-        f'ODYSSEUS_USER_SHELL="${{SHELL:-}}"\n'
-        f'if [ -n "$ODYSSEUS_USER_SHELL" ] && [ -x "$ODYSSEUS_USER_SHELL" ]; then\n'
-        f'  ODYSSEUS_USER_PATH="$("$ODYSSEUS_USER_SHELL" -ic \'printf "__ODYSSEUS_PATH__%s\\n" "$PATH"\' 2>/dev/null | sed -n \'s/^__ODYSSEUS_PATH__//p\' | tail -n 1 || true)"\n'
-        f'  if [ -n "$ODYSSEUS_USER_PATH" ]; then export PATH="$ODYSSEUS_USER_PATH:$PATH"; fi\n'
+        f'SPARK_USER_SHELL="${{SHELL:-}}"\n'
+        f'if [ -n "$SPARK_USER_SHELL" ] && [ -x "$SPARK_USER_SHELL" ]; then\n'
+        f'  SPARK_USER_PATH="$("$SPARK_USER_SHELL" -ic \'printf "__SPARK_PATH__%s\\n" "$PATH"\' 2>/dev/null | sed -n \'s/^__SPARK_PATH__//p\' | tail -n 1 || true)"\n'
+        f'  if [ -n "$SPARK_USER_PATH" ]; then export PATH="$SPARK_USER_PATH:$PATH"; fi\n'
         f"fi\n"
         f"{cmd} 2>&1 | tee '{log_path}'\n"
         f"EC=${{PIPESTATUS[0]}}\n"
@@ -1039,6 +1039,15 @@ def setup_shell_routes() -> APIRouter:
                 "target": "remote",
             },
             {
+                "name": "colibri",
+                "pip": "",
+                "desc": "Hierarchical-memory inference engine for frontier MoE models (GLM-5.2)",
+                "category": "LLM",
+                "target": "remote",
+                "kind": "system",
+                "install_hint": "Compiled automatically on first run or clone from github.com/pavanchandar77/colibri",
+            },
+            {
                 "name": "APFEL",
                 "pip": "",
                 "desc": "OpenAI-compatible API for Apple Foundational Models on Apple Silicon",
@@ -1135,9 +1144,14 @@ def setup_shell_routes() -> APIRouter:
                 checks = []
                 for name in remote_system_names:
                     qn = shlex.quote(name)
-                    checks.append(
-                        f"if command -v {qn} >/dev/null 2>&1; then echo {qn}=1; else echo {qn}=0; fi"
-                    )
+                    if name == "colibri":
+                        checks.append(
+                            f'if [ -f "$HOME/colibri/c/coli" ] || [ -f "$HOME/colibri/c/coli.exe" ] || command -v coli >/dev/null 2>&1; then echo colibri=1; else echo colibri=0; fi'
+                        )
+                    else:
+                        checks.append(
+                            f"if command -v {qn} >/dev/null 2>&1; then echo {qn}=1; else echo {qn}=0; fi"
+                        )
                 inner = " ; ".join(checks)
                 argv = _ssh_base_argv(host, ssh_port) + [inner]
                 proc = await asyncio.create_subprocess_exec(
@@ -1176,6 +1190,12 @@ def setup_shell_routes() -> APIRouter:
                         if IS_APPLE_SILICON
                         else "Requires a native Apple Silicon Mac with Apple Foundational Models support."
                     )
+                elif pkg["name"] == "colibri":
+                    from pathlib import Path
+                    coli_path = Path(os.path.expanduser("~/colibri/c/coli"))
+                    coli_exe = Path(os.path.expanduser("~/colibri/c/coli.exe"))
+                    pkg["installed"] = coli_path.is_file() or coli_exe.is_file()
+                    pkg["status_note"] = "Colibri engine ready" if pkg["installed"] else "Colibri not found in ~/colibri/c/"
                 else:
                     pkg["installed"] = shutil.which(pkg["name"]) is not None
             elif pkg["name"] == "llama_cpp" and shutil.which("llama-server"):

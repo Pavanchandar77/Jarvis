@@ -97,8 +97,8 @@ app.add_middleware(
         "Content-Type",
         "X-API-Key",
         "X-Auth-Token",
-        "X-Odysseus-Internal-Token",
-        "X-Odysseus-Owner",
+        "X-Spark-Internal-Token",
+        "X-Spark-Owner",
         "X-Requested-With",
         "X-TZ-Offset",
     ],
@@ -239,7 +239,7 @@ if AUTH_ENABLED:
         forwarding headers. A bare ``client.host in ('127.0.0.1','::1')`` check is
         unsafe behind a Cloudflare tunnel / reverse proxy: those connect from
         loopback, so a remote visitor would otherwise inherit local trust and
-        slip past LOCALHOST_BYPASS or spoof the internal-tool path. Odysseus's own
+        slip past LOCALHOST_BYPASS or spoof the internal-tool path. Spark's own
         in-process agent loopback calls carry none of these headers, so they still
         qualify."""
         host = request.client.host if request.client else None
@@ -273,10 +273,10 @@ if AUTH_ENABLED:
                 _hdr = request.headers.get(INTERNAL_TOOL_HEADER)
                 if _hdr and secrets.compare_digest(_hdr, _ITT) and _is_trusted_loopback(request):
                     # Impersonation: when the agent's loopback call sets
-                    # X-Odysseus-Owner, attribute the request to that user only
+                    # X-Spark-Owner, attribute the request to that user only
                     # if they exist. Authorization checks remain separate; this
                     # is just owner attribution for notes/calendar/etc.
-                    _impersonate = (request.headers.get("X-Odysseus-Owner") or "").strip()
+                    _impersonate = (request.headers.get("X-Spark-Owner") or "").strip()
                     _auth_mgr = getattr(request.app.state, "auth_manager", None) or auth_manager
                     if _impersonate and _impersonate in getattr(_auth_mgr, "users", {}):
                         request.state.current_user = _impersonate
@@ -749,6 +749,97 @@ app.include_router(setup_contacts_routes())
 from companion import setup_companion_routes
 app.include_router(setup_companion_routes())
 
+# Semantic Twin — graph-native knowledge system for generated applications
+from src.constants import SEMANTIC_TWINS_DIR, PROJECTS_DIR, PROJECT_REGISTRY_FILE
+from services.semantic_twin import SemanticTwinService
+from services.semantic_twin.integration.hooks import (
+    IntegrationService,
+    set_integration_service,
+)
+from routes.semantic_twin_routes import setup_semantic_twin_routes
+
+semantic_twin_service = SemanticTwinService(SEMANTIC_TWINS_DIR)
+semantic_twin_integration = IntegrationService(
+    semantic_twin_service,
+    registry_path=PROJECT_REGISTRY_FILE,
+    projects_dir=PROJECTS_DIR,
+    timeline_base=SEMANTIC_TWINS_DIR,
+)
+set_integration_service(semantic_twin_integration)
+app.include_router(setup_semantic_twin_routes(semantic_twin_service, semantic_twin_integration))
+logger.info(
+    "Semantic Twin routes + Phase-1 integration initialized (%s)",
+    SEMANTIC_TWINS_DIR,
+)
+
+# Spark Software OS (Phase 2) — architecture-first, agents, simulation, etc.
+from src.constants import SPARK_OS_DIR
+from services.spark_os import SparkOSService
+from routes.spark_os_routes import setup_spark_os_routes
+
+spark_os_service = SparkOSService(
+    semantic_twin_service,
+    os_dir=SPARK_OS_DIR,
+    integration=semantic_twin_integration,
+)
+app.include_router(setup_spark_os_routes(spark_os_service))
+app.state.spark_os = spark_os_service
+logger.info("Spark OS (Phase 2) routes initialized (%s)", SPARK_OS_DIR)
+
+# Harness Layer + Workspace Manager (coding engines: OpenCode first)
+from src.constants import (
+    WORKSPACES_DIR,
+    WORKSPACE_REGISTRY_FILE,
+    HARNESS_STATE_DIR,
+    BASE_DIR as _SPARK_BASE,
+)
+from services.harness import HarnessManager
+from services.harness.registry import DEFAULT_REGISTRY
+from services.harness.null_harness import NullHarness
+from services.harness.opencode_harness import register_opencode_harness
+from services.workspace import WorkspaceManager, WorkspaceRegistry
+from routes.workspace_routes import setup_workspace_routes, setup_harness_plugin_routes
+import os as _os
+
+_os.makedirs(HARNESS_STATE_DIR, exist_ok=True)
+_os.makedirs(WORKSPACES_DIR, exist_ok=True)
+
+DEFAULT_REGISTRY.register(
+    "null",
+    NullHarness,
+    display_name="Null Harness",
+    metadata={"testing": True},
+)
+register_opencode_harness(
+    DEFAULT_REGISTRY,
+    opencode_root=_os.path.join(_SPARK_BASE, "opencode"),
+    spark_base_url=_os.getenv("SPARK_PUBLIC_URL", "http://127.0.0.1:7000"),
+    plugin_path=_os.path.join(_SPARK_BASE, "integrations", "opencode", "plugin"),
+)
+
+harness_manager = HarnessManager(
+    session_store_path=_os.path.join(HARNESS_STATE_DIR, "sessions.json"),
+    registry=DEFAULT_REGISTRY,
+)
+workspace_registry = WorkspaceRegistry(
+    index_path=WORKSPACE_REGISTRY_FILE,
+    manifests_dir=_os.path.join(WORKSPACES_DIR, "manifests"),
+)
+workspace_manager = WorkspaceManager(
+    workspace_registry,
+    harness_manager,
+    twin_integration=semantic_twin_integration,
+    spark_os=spark_os_service,
+)
+app.include_router(setup_workspace_routes(workspace_manager, harness_manager))
+app.include_router(setup_harness_plugin_routes(workspace_manager))
+app.state.workspace_manager = workspace_manager
+app.state.harness_manager = harness_manager
+logger.info(
+    "Workspace Manager + Harness Layer initialized (engines=%s)",
+    [h["harness_id"] for h in DEFAULT_REGISTRY.available()],
+)
+
 
 # ========= ROUTES (kept in app.py) =========
 
@@ -788,6 +879,36 @@ async def serve_calendar(request: Request):
 @app.get("/cookbook")
 async def serve_cookbook(request: Request):
     return await serve_index(request)
+
+@app.get("/semantic-twin")
+async def serve_semantic_twin(request: Request):
+    """Standalone Semantic Twin explorer (living knowledge graph)."""
+    twin_path = abs_join(STATIC_DIR, "semantic-twin.html")
+    if os.path.exists(twin_path):
+        return FileResponse(twin_path)
+    raise HTTPException(404, "semantic-twin.html not found")
+
+@app.get("/spark-os")
+async def serve_spark_os(request: Request):
+    """Spark Software Operating System shell (Phase 2)."""
+    os_path = abs_join(STATIC_DIR, "spark-os.html")
+    if os.path.exists(os_path):
+        return FileResponse(os_path)
+    raise HTTPException(404, "spark-os.html not found")
+
+@app.get("/coding")
+async def serve_coding(request: Request):
+    """Coding Mode — first-class engineering workspace (SPA shell)."""
+    return await serve_index(request)
+
+@app.get("/mission")
+@app.get("/architecture")
+@app.get("/runtime-viz")
+@app.get("/time-travel")
+async def serve_living_workspace(request: Request):
+    """Living Software Workspace views (Mission Control, Architecture, Runtime, Time Travel)."""
+    return await serve_index(request)
+
 
 @app.get("/email")
 async def serve_email(request: Request):
@@ -842,6 +963,7 @@ async def readiness_check() -> JSONResponse:
 
 @app.get("/api/runtime")
 async def runtime_info() -> Dict[str, object]:
+    """Runtime surface for Living Workspace Runtime Digital Twin + diagnostics."""
     in_docker = os.path.exists("/.dockerenv")
     if not in_docker:
         try:
@@ -855,10 +977,37 @@ async def runtime_info() -> Dict[str, object]:
         or os.getenv("OLLAMA_URL")
         or ("http://host.docker.internal:11434/v1" if in_docker else "http://127.0.0.1:11434/v1")
     )
-    return {
+    payload: Dict[str, object] = {
         "in_docker": in_docker,
         "ollama_base_url": ollama_url,
+        "memory_tier": "SSD-backed (NVMe streaming)",
+        "ssd_streaming": True,
     }
+    # Best-effort host / engine telemetry for Runtime Visualization
+    try:
+        from services.hwfit.hardware import detect_system
+        sysinfo = detect_system()
+        if isinstance(sysinfo, dict):
+            vram = sysinfo.get("vram_gb") or sysinfo.get("gpu_vram_gb")
+            ram = sysinfo.get("ram_gb") or sysinfo.get("total_ram_gb")
+            if vram is not None:
+                payload["vram_gb"] = vram
+            if ram is not None:
+                payload["ram_gb"] = ram
+            if sysinfo.get("gpu_name"):
+                payload["gpu"] = sysinfo["gpu_name"]
+    except Exception:
+        pass
+    try:
+        from pathlib import Path
+        from core.runtime import HierarchicalMemoryRuntime
+        rt = HierarchicalMemoryRuntime(Path("."))
+        tel = await rt.get_performance_telemetry("default")
+        if isinstance(tel, dict):
+            payload.update({k: v for k, v in tel.items() if v is not None})
+    except Exception:
+        pass
+    return payload
 
 # ========= LIFECYCLE =========
 
@@ -1043,13 +1192,13 @@ async def _startup_event():
 
     # Start scheduled task runner — skip when running under a cron-driven
     # deployment where an external worker drives task firing. Mirrors
-    # `ODYSSEUS_INPROCESS_POLLERS` from the email pollers.
-    _tasks_inprocess = os.environ.get("ODYSSEUS_INPROCESS_TASKS", "1").strip().lower()
+    # `SPARK_INPROCESS_POLLERS` from the email pollers.
+    _tasks_inprocess = os.environ.get("SPARK_INPROCESS_TASKS", "1").strip().lower()
     if _tasks_inprocess not in ("0", "false", "no", "off", ""):
         await task_scheduler.start()
     else:
         logger.info(
-            "In-process task scheduler disabled (ODYSSEUS_INPROCESS_TASKS=0); "
+            "In-process task scheduler disabled (SPARK_INPROCESS_TASKS=0); "
             "drive task firing externally (e.g. cron)."
         )
     # Periodic null-owner sweep — re-runs the legacy-owner assignment hourly
